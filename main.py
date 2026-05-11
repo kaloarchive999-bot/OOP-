@@ -363,36 +363,97 @@ class Marketplace:
 # ==================== MAIN GAME FLOW ====================
 
 def main():
-    st.title("🌙 꿈 해석 거래소 (Dream Decoder)")
-    st.write("당신의 무의식을 거래하세요. 예산에 맞는 최고의 해석사를 매칭해 드립니다.")
+    """게임 메인 루프"""
+    print("\n" + "="*60)
+    print("🌙 꿈 해석 거래소 (Dream Decoder Marketplace) 🌙")
+    print("="*60)
+    print("당신의 무의식을 거래하세요.")
+    print("예산에 맞는 최고의 해석사를 매칭해 드립니다.\n")
     
-    # 1. 꿈 입력창 (웹용)
-    dream_input = st.text_area("어젯밤 꾼 꿈을 입력하세요 (10자 이상):")
+    marketplace = Marketplace()
     
-    # 2. 예산 입력창 (웹용)
-    budget = st.number_input("꿈 해석에 얼마를 지불하시겠습니까? (원):", min_value=0, step=100)
-    
-    # 3. 실행 버튼 (웹용)
-    if st.button("해석가 매칭하기"):
-        try:
-            dream = Dream(dream_input)
-            st.info(f"감지된 감정: {dream.emotion_tag} | 키워드: {', '.join(dream.keywords)}")
-            
-            marketplace = Marketplace()
-            marketplace.set_user_budget(budget)
-            available = marketplace.get_available_interpreters()
-            
-            if not available:
-                st.error("❌ 예산이 부족하여 고용할 수 있는 모델이 없습니다.")
-            else:
-                st.success("💰 고용 가능한 해석가 목록입니다.")
-                for interp in available:
-                    st.write(f"- {interp.name} ({interp.price}원)")
+    while True:
+        print("\n" + "="*60)
+        print("[메뉴]")
+        print("="*60)
+        print("1. 새 꿈 입력 및 해석 시작")
+        print("2. 거래 이력 보기")
+        print("3. 게임 종료")
+        
+        menu_choice = input("\n선택 (1-3): ").strip()
+        
+        if menu_choice == '1':
+            try:
+                # 꿈 입력
+                print("\n📝 [꿈 입력]")
+                print("-" * 40)
+                dream_input = input("어젯밤 꾼 꿈을 입력하세요 (10자 이상): ").strip()
                 
-                # (이후 선택 로직도 st.radio나 st.selectbox로 구현)
+                try:
+                    dream = Dream(dream_input)
+                except UninterpretableDreamError as e:
+                    print(f"\n{e}\n")
+                    continue
                 
-        except UninterpretableDreamError as e:
-            st.error(str(e))
+                # 꿈 정보 표시
+                print(dream)
+                
+                # 예산 입력
+                print("💰 [예산 설정]")
+                print("-" * 40)
+                try:
+                    budget = int(input("꿈 해석에 얼마를 지불하시겠습니까? (원): "))
+                    if budget < 0:
+                        budget = 0
+                except ValueError:
+                    print("❌ 숫자를 입력해주세요.")
+                    continue
+                
+                marketplace.set_user_budget(budget)
+                
+                # 거래소 메인 화면
+                available = marketplace.display_marketplace()
+                
+                if available is None:
+                    print("💬 예산을 충전하고 다시 시도해주세요.")
+                    continue
+                
+                # 해석가 선택
+                try:
+                    choice_str = input("\n해석가 번호를 선택하세요 (1-{}): ".format(len(available)))
+                    choice_idx = int(choice_str)
+                    
+                    # 해석 실행
+                    interpretation = marketplace.hire_interpreter(choice_idx, dream)
+                    print(interpretation)
+                    
+                    print(f"\n✅ 해석 완료! 남은 예산: {marketplace.user_budget}원")
+                
+                except InsufficientFundsError as e:
+                    print(f"\n{e}\n")
+                except ValueError as e:
+                    print(f"\n❌ {e}\n")
+                
+            except Exception as e:
+                print(f"\n⚠️ 오류 발생: {e}\n")
+        
+        elif menu_choice == '2':
+            marketplace.show_history()
+        
+        elif menu_choice == '3':
+            print("\n" + "="*60)
+            print("🌙 꿈 해석 거래소를 종료합니다.")
+            print(f"   총 거래 횟수: {len(marketplace.transactions)}")
+            print(f"   남은 예산: {marketplace.user_budget}원")
+            print("="*60)
+            print("\n고마워요! 즐거운 꿈의 세계를 경험하셨기를 바랍니다. 🌙\n")
+            break
+        
+        else:
+            print("\n❌ 올바른 선택을 입력해주세요.\n")
+
+
+# ==================== PROGRAM ENTRY POINT ====================
 
 if __name__ == "__main__":
     main()
