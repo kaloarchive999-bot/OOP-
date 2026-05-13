@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>무의식 재판소 - 드림 인젝터 v2077</title>
+<style>
+  /* ============== NEO-CLINICAL / LUCID DREAM THEME ============== */
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  html, body {
+    /* 밝고 몽환적인 파스텔 블루/퍼플 그라데이션 배경 */
+    background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%) fixed;
+    color: #2c3e50;
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  
+  /* 부드러운 배경 패턴 */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at center, transparent 0%, rgba(255,255,255,0.4) 100%);
+    pointer-events: none; z-index: 1;
+  }
+  
+  .wrap { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; padding: 30px 20px 80px; }
+
+  header {
+    text-align: center; margin-bottom: 35px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.5);
+    padding-bottom: 25px;
+  }
+  
+  h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+    color: #4a4e69;
+    letter-spacing: 2px;
+    text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.8);
+  }
+  
+  .sub {
+    color: #6c757d; margin-top: 10px;
+    font-size: 1rem; letter-spacing: 1px; font-weight: 500;
+  }
+
+  /* 반투명 유리 패널 효과 (Glassmorphism) */
+  .panel {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
+  }
+  
+  .panel h2 {
+    font-family: 'Orbitron', sans-serif;
+    color: #5a189a; letter-spacing: 1px;
+    border-left: 5px solid #9d4edd;
+    padding-left: 12px; margin-bottom: 16px;
+    font-size: 1.2rem;
+  }
+
+  textarea {
+    width: 100%; min-height: 120px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #333;
+    border: 2px solid #c8b6ff;
+    border-radius: 8px;
+    padding: 15px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 1.05rem;
+    resize: vertical;
+    outline: none;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+  }
+  textarea:focus { 
+    border-color: #7b2cbf; 
+    box-shadow: 0 0 0 4px rgba(123, 44, 191, 0.15); 
+  }
+
+  .interpreters {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-top: 15px;
+  }
+  
+  .card {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+    padding: 18px; border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.04);
+  }
+  
+  .card:hover { 
+    border-color: #9d4edd; 
+    transform: translateY(-4px); 
+    box-shadow: 0 8px 15px rgba(157, 78, 221, 0.15);
+  }
+  
+  .card.active {
+    background: #f8f9fa;
+    border-color: #3a0ca3;
+    box-shadow: 0 0 0 2px #3a0ca3 inset;
+  }
+  
+  .card .name { color: #240046; font-family: 'Noto Sans KR', sans-serif; font-weight: 700; font-size: 1.1rem; }
+  .card .title { font-size: 0.9rem; color: #6c757d; margin: 6px 0 10px; }
+  .card .opts { font-size: 0.85rem; color: #5a189a; background: #f3e8ff; padding: 6px 10px; border-radius: 6px; display: inline-block; }
+
+  .options-row {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;
+  }
+  
+  .opt-btn {
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    color: #495057;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 500;
+    cursor: pointer; font-size: 0.95rem;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  }
+  
+  .opt-btn:hover { background: #f8f9fa; border-color: #adb5bd; }
+  .opt-btn.active { 
+    background: #3a0ca3; 
+    color: #ffffff; 
+    border-color: #3a0ca3; 
+    box-shadow: 0 4px 10px rgba(58, 12, 163, 0.25); 
+  }
+
+  .submit {
+    display: block; margin: 30px auto 0;
+    background: linear-gradient(135deg, #7b2cbf, #3a0ca3);
+    color: #ffffff;
+    font-family: 'Orbitron', sans-serif; font-weight: 700; letter-spacing: 2px;
+    padding: 16px 40px;
+    border: none; cursor: pointer; font-size: 1.1rem;
+    border-radius: 30px;
+    box-shadow: 0 6px 20px rgba(58, 12, 163, 0.3);
+    transition: all 0.3s ease;
+  }
+  .submit:hover { transform: translateY(-3px); box-shadow: 0 10px 25px rgba(58, 12, 163, 0.4); }
+  .submit:disabled { background: #adb5bd; box-shadow: none; cursor: not-allowed; transform: none; }
+
+  /* 콘솔 창 디자인 (어두운 배경을 제거하고 클린한 분석 리포트 스타일로 변경) */
+  .console {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-left: 6px solid #4cc9f0;
+    border-radius: 8px;
+    padding: 20px; margin-top: 20px;
+    color: #343a40;
+    font-family: 'Noto Sans KR', sans-serif;
+    white-space: pre-wrap;
+    min-height: 80px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  .console .verdict { color: #212529; font-size: 1.1rem; line-height: 1.7; font-weight: 500; margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px; }
+  .console .meta { color: #198754; font-size: 0.9rem; margin-top: 15px; font-weight: 700; }
+  
+  .console.err { border-left-color: #dc3545; color: #dc3545; background: #fff5f5; }
+
+  .risk { display:inline-block; padding: 4px 12px; border-radius: 20px; margin-left: 10px; font-size: 0.85rem; font-weight: 700; }
+  .risk.LOW { background: #d1e7dd; color: #0f5132; }
+  .risk.MEDIUM { background: #fff3cd; color: #664d03; }
+  .risk.HIGH { background: #f8d7da; color: #842029; }
+
+  footer { text-align: center; color: #6c757d; font-size: 0.85rem; margin-top: 50px; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>UNCONSCIOUS COURT</h1>
+    <div class="sub">Dream Injector v2077.11.13 — 무의식 재판소 검열 시스템</div>
+  </header>
+
+  <!-- STEP 1: 원시 꿈 입력 -->
+  <div class="panel">
+    <h2>[ STEP 1 ] 원시 꿈 입고 (RAW DREAM INPUT)</h2>
+    <p style="margin-bottom:12px; color:#495057; font-size:0.95rem; font-weight:500;">
+      ▶ 시민의 무의식 단편을 <span style="color:#7b2cbf; font-weight:700;">최소 10자 이상</span> 입력해 주십시오.
+    </p>
+    <textarea id="dreamInput" placeholder="예시) 끝없는 계단을 오르는데 발이 무거워지고 뒤에서 누군가 쫓아오는 꿈..."></textarea>
+  </div>
+
+  <!-- STEP 2: 해석가 선택 -->
+  <div class="panel">
+    <h2>[ STEP 2 ] 해석가 배정 (ASSIGN INTERPRETER)</h2>
+    <div class="interpreters" id="interpreters">
+      <!-- JS로 동적 생성 -->
+    </div>
+  </div>
+
+  <!-- STEP 3: 가공 방식 선택 -->
+  <div class="panel">
+    <h2>[ STEP 3 ] 가공 방식 선택 (SELECT PROCESS)</h2>
+    <div class="options-row" id="options">
+      <span style="color:#adb5bd; font-weight:500;">← 먼저 해석가를 선택하세요.</span>
+    </div>
+    <button id="submitBtn" class="submit" disabled>INJECT DREAM</button>
+  </div>
+
+  <!-- 결과 콘솔 -->
+  <div class="panel">
+    <h2>[ OUTPUT ] 검열 결과 리포트</h2>
+    <div id="console" class="console">대기 중... 시민의 꿈을 입력하고 처리 옵션을 선택해 주세요.</div>
+  </div>
+
+  <footer>© 2077 Ministry of Subconscious Affairs · Authorized Personnel Only.</footer>
+</div>
+
+<script>
+// ===== STATE =====
+let INTERPRETERS = [];
+let selectedInterpreter = null;
+let selectedOption = null;
+
+// ===== INIT: 해석가 목록 불러오기 =====
+async function loadInterpreters() {
+  try {
+    const res = await fetch('/api/interpreters');
+    const data = await res.json();
+    INTERPRETERS = data.interpreters || [];
+    renderInterpreters();
+  } catch (e) {
+    document.getElementById('interpreters').innerHTML =
+      '<div style="color:#dc3545; font-weight:bold;">⚠ 백엔드 연결 실패. Flask 서버가 실행 중인지 확인하세요.</div>';
+  }
+}
+
+function renderInterpreters() {
+  const box = document.getElementById('interpreters');
+  box.innerHTML = '';
+  INTERPRETERS.forEach(it => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.dataset.key = it.key;
+    div.innerHTML = `
+      <div class="name">${it.name}</div>
+      <div class="title">${it.title}</div>
+      <div class="opts">분석 옵션 ${it.options.length}개</div>
+    `;
+    div.onclick = () => selectInterpreter(it.key);
+    box.appendChild(div);
+  });
+}
+
+function selectInterpreter(key) {
+  selectedInterpreter = INTERPRETERS.find(x => x.key === key);
+  selectedOption = null;
+  document.querySelectorAll('.card').forEach(c => {
+    c.classList.toggle('active', c.dataset.key === key);
+  });
+  renderOptions();
+  updateSubmit();
+}
+
+function renderOptions() {
+  const box = document.getElementById('options');
+  if (!selectedInterpreter) { box.innerHTML = '<span style="color:#adb5bd; font-weight:500;">← 먼저 해석가를 선택하세요.</span>'; return; }
+  box.innerHTML = '';
+  selectedInterpreter.options.forEach(opt => {
+    const b = document.createElement('button');
+    b.className = 'opt-btn';
+    b.textContent = opt;
+    b.onclick = () => {
+      selectedOption = opt;
+      document.querySelectorAll('.opt-btn').forEach(x => x.classList.toggle('active', x.textContent === opt));
+      updateSubmit();
+    };
+    box.appendChild(b);
+  });
+}
+
+function updateSubmit() {
+  document.getElementById('submitBtn').disabled = !(selectedInterpreter && selectedOption);
+}
+
+// ===== SUBMIT =====
+document.getElementById('submitBtn').onclick = async () => {
+  const dream = document.getElementById('dreamInput').value;
+  const cons = document.getElementById('console');
+  cons.classList.remove('err');
+  cons.textContent = '무의식 데이터 분석 및 가공 중... 잠시만 기다려 주십시오.';
+
+  try {
+    const res = await fetch('/api/interpret', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dream: dream,
+        interpreter: selectedInterpreter.key,
+        option: selectedOption
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      cons.classList.add('err');
+      cons.textContent = `⚠ [${data.error}] ${data.message}`;
+      return;
+    }
+    renderResult(data.result);
+  } catch (e) {
+    cons.classList.add('err');
+    cons.textContent = '⚠ 네트워크 오류: ' + e.message;
+  }
+};
+
+function renderResult(r) {
+  const cons = document.getElementById('console');
+  cons.classList.remove('err');
+  cons.innerHTML = `
+<b>[분석 메타데이터]</b>
+• CITIZEN ID : ${r.dream_meta.citizen_id}
+• LENGTH : ${r.dream_meta.length} 자
+• INTERPRETER : ${r.interpreter} (${r.tag})
+• PROCESS : ${r.option}
+• RISK LEVEL : <span class="risk ${r.risk_level}">${r.risk_level}</span>
+<div class="verdict">${r.verdict}</div>
+<div class="meta">✓ 가공 완료. 시민의 뇌에 안전하게 주입 가능합니다.</div>
+`;
+}
+
+// 시작
+loadInterpreters();
+</script>
+</body>
+</html>
