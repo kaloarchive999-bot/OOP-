@@ -1,67 +1,72 @@
 # -*- coding: utf-8 -*-
 """
-================================================================
- 무의식 재판소 - 드림 인젝터 (Dream Injector)
- PART 1. Python 백엔드 (Flask 기반 API)
-----------------------------------------------------------------
- [OOP 핵심 요구사항 체크리스트]
-   ✅ 1) 클래스 3개 이상 (Interpreter 부모 + 3개 자식 + Dream + DreamCensorshipCourt)
-   ✅ 2) 다형성: process(dream_text, option) 오버라이딩
-   ✅ 3) 매직 메소드: __str__, __len__, __repr__, __call__
-   ✅ 4) 사용자 정의 예외: UnprocessableDreamError, InvalidInterpreterError,
-                          InvalidOptionError
-================================================================
+무의식 재판소 - 드림 인젝터 (Dream Injector)
+Streamlit 전용 버전
 """
 
-from flask import Flask, request, jsonify, send_from_directory
+import streamlit as st
 from abc import ABC, abstractmethod
 import random
 import hashlib
-import os
 import datetime
 
-app = Flask(__name__, static_folder='../public', static_url_path='')
+# ================================================================
+# [UI 디자인] Neo-Clinical / Lucid Dream 스타일 주입
+# ================================================================
+st.set_page_config(page_title="무의식 재판소", page_icon="🧠", layout="centered")
+
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%) fixed;
+        font-family: 'Noto Sans KR', sans-serif;
+    }
+    .main-title {
+        text-align: center;
+        color: #4a4e69;
+        font-weight: 900;
+        font-size: 2.5rem;
+        text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.8);
+        margin-bottom: 5px;
+    }
+    .sub-title {
+        text-align: center;
+        color: #5a189a;
+        margin-bottom: 30px;
+    }
+    .stTextArea textarea {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 2px solid #c8b6ff !important;
+        border-radius: 8px !important;
+    }
+    .result-box {
+        background: rgba(255, 255, 255, 0.85);
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #9d4edd;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-top: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 
 # ================================================================
-# [SECTION A] 사용자 정의 예외 (Custom Exceptions)
+# [SECTION A] 사용자 정의 예외
 # ================================================================
 class DreamInjectorError(Exception):
-    """드림 인젝터 시스템 최상위 예외 클래스."""
-    status_code = 400
-    def __init__(self, message, status_code=None, payload=None):
-        super().__init__(message)
-        self.message = message
-        if status_code is not None:
-            self.status_code = status_code
-        self.payload = payload or {}
-
-    def to_dict(self):
-        return {"error": self.__class__.__name__, "message": self.message, **self.payload}
-
+    pass
 
 class UnprocessableDreamError(DreamInjectorError):
-    """꿈 텍스트가 10자 미만일 때 발생."""
-    status_code = 422
-
-
-class InvalidInterpreterError(DreamInjectorError):
-    """존재하지 않는 해석가를 선택했을 때 발생."""
-    status_code = 404
-
-
-class InvalidOptionError(DreamInjectorError):
-    """해석가의 가공 옵션이 유효하지 않을 때 발생."""
-    status_code = 400
-
+    pass
 
 # ================================================================
-# [SECTION B] Dream 데이터 클래스 (원시 꿈 데이터 캡슐화)
+# [SECTION B] Dream 데이터 클래스
 # ================================================================
 class Dream:
-    """시민의 원시 꿈 데이터(Raw Dream)를 표현하는 클래스."""
     MIN_LENGTH = 10
 
-    def __init__(self, raw_text: str, citizen_id: str = None):
+    def __init__(self, raw_text: str):
         if not isinstance(raw_text, str):
             raise UnprocessableDreamError("꿈 데이터는 텍스트 형식이어야 합니다.")
         cleaned = raw_text.strip()
@@ -70,300 +75,120 @@ class Dream:
                 f"⚠ 무의식 단편이 너무 짧습니다. 최소 {self.MIN_LENGTH}자 이상의 꿈 조각이 필요합니다. (현재 {len(cleaned)}자)"
             )
         self.raw_text = cleaned
-        self.citizen_id = citizen_id or self._generate_citizen_id(cleaned)
-        self.timestamp = datetime.datetime.utcnow().isoformat()
+        self.citizen_id = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:8].upper()
+        self.timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    @staticmethod
-    def _generate_citizen_id(text: str) -> str:
-        h = hashlib.sha256(text.encode("utf-8")).hexdigest()[:8].upper()
-        return f"CITIZEN-{h}"
-
-    # ---- 매직 메소드 ----
     def __len__(self):
-        """매직메소드 ①: len(dream)으로 꿈 텍스트 길이를 반환."""
         return len(self.raw_text)
 
-    def __str__(self):
-        """매직메소드 ②: 꿈 데이터의 사용자 친화적 표현."""
-        return f"[{self.citizen_id}] 원시 꿈({len(self)}자): {self.raw_text[:30]}..."
-
-    def __repr__(self):
-        """매직메소드 ③: 디버깅용 정식 표현."""
-        return f"Dream(citizen_id={self.citizen_id!r}, length={len(self)})"
-
-
 # ================================================================
-# [SECTION C] Interpreter 부모 클래스 (추상 베이스)
+# [SECTION C & D] Interpreter 부모 및 자식 클래스
 # ================================================================
 class Interpreter(ABC):
-    """
-    모든 꿈 해석가가 반드시 상속해야 하는 추상 부모 클래스.
-    다형성을 강제하기 위해 process()를 추상 메소드로 선언.
-    """
     def __init__(self, name: str, title: str, options: list):
         self.name = name
         self.title = title
-        self.options = options  # 각 해석가는 4가지 가공방식을 보유
+        self.options = options
 
     @abstractmethod
     def process(self, dream_text: str, option: str) -> dict:
-        """
-        다형성(Polymorphism)의 핵심.
-        부모는 시그니처만 정의하고, 자식이 각자의 방식으로 오버라이딩한다.
-        """
         raise NotImplementedError
 
-    def validate_option(self, option: str):
-        if option not in self.options:
-            raise InvalidOptionError(
-                f"'{self.name}' 해석가는 '{option}' 가공 방식을 모릅니다. "
-                f"사용 가능: {self.options}"
-            )
-
-    # ---- 매직 메소드 ----
-    def __str__(self):
-        return f"🧠 해석가 [{self.name}] - {self.title} | 가공방식: {self.options}"
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(name={self.name!r})"
-
-    def __call__(self, dream_text, option):
-        """매직메소드 ④: interpreter(dream_text, option) 호출 가능하게 함."""
-        return self.process(dream_text, option)
-
-
-# ================================================================
-# [SECTION D] 3명의 자식 해석가 (다형성 구현)
-# ================================================================
 class ProfessorInterpreter(Interpreter):
-    """학술적·논리적 관점에서 꿈을 해석하는 교수형 해석가."""
     def __init__(self):
-        super().__init__(
-            name="프로페서 K. 융그",
-            title="국립 무의식 연구소 명예교수",
-            options=["프로이트식 분석", "융의 원형 해석", "라캉식 기호해석", "구조주의 분해"]
-        )
+        super().__init__("이동현 교수", "SSAI 사회과학 분석가", ["정치/권력 관점", "자본/경제 관점", "사회/문화 관점", "기술/AI 관점"])
 
     def process(self, dream_text: str, option: str) -> dict:
-        self.validate_option(option)
-        templates = {
-            "프로이트식 분석": (
-                f"📚 '{dream_text[:20]}...' 이 꿈은 명백한 억압된 욕망의 발현이오. "
-                "유년기의 미해결 갈등이 상징적 이미지로 치환되어 표면화된 것이지."
-            ),
-            "융의 원형 해석": (
-                f"📚 자네의 꿈에는 '그림자(Shadow)' 원형이 강하게 드러나는군. "
-                f"'{dream_text[:15]}...'의 장면은 집단무의식 깊은 곳의 자기실현 충동이오."
-            ),
-            "라캉식 기호해석": (
-                f"📚 이 꿈은 '실재계'의 균열을 보여주오. 기표와 기의의 어긋남이 "
-                f"'{dream_text[:15]}...' 구조 속에서 미끄러지고 있음."
-            ),
-            "구조주의 분해": (
-                f"📚 꿈을 이항대립으로 분해하면: [상승/하강], [추격자/피추격자]. "
-                f"이는 사회적 권력 구조의 내면화된 투영이오."
-            ),
+        temps = {
+            "정치/권력 관점": f"이 꿈 '{dream_text[:15]}...'은 국가 통제에 대한 무의식적 저항의 발현입니다.",
+            "자본/경제 관점": f"명백하군요. '{dream_text[:15]}...'는 자본주의 무한 경쟁이 주는 극도의 스트레스입니다.",
+            "사회/문화 관점": f"현대인의 소외감이 투영되었습니다. '{dream_text[:15]}...'에서 그 단절감이 느껴지네요.",
+            "기술/AI 관점": f"AI 알고리즘 지배에 따른 인지 과부하 현상입니다. '{dream_text[:15]}...'이 그 증거죠."
         }
-        verdict = templates[option]
-        return {
-            "interpreter": self.name,
-            "title": self.title,
-            "option": option,
-            "verdict": verdict,
-            "risk_level": random.choice(["LOW", "MEDIUM", "HIGH"]),
-            "tag": "🎓 ACADEMIC"
-        }
-
+        return {"verdict": temps[option], "risk": "HIGH"}
 
 class MBTIInterpreter(Interpreter):
-    """성격유형(MBTI) 관점에서 꿈을 해석하는 해석가."""
     def __init__(self):
-        super().__init__(
-            name="MBTI 큐레이터 미나",
-            title="시민 성격유형 적합도 분석관",
-            options=["INTJ 전략형", "ENFP 활동가형", "ISFJ 수호자형", "ESTP 사업가형"]
-        )
+        super().__init__("MBTI 전문가 미나", "대중 심리 분석관", ["ST (감각-사고)", "SF (감각-감정)", "NT (직관-사고)", "NF (직관-감정)"])
 
     def process(self, dream_text: str, option: str) -> dict:
-        self.validate_option(option)
-        templates = {
-            "INTJ 전략형": (
-                f"🔮 '{dream_text[:15]}...' — INTJ 시민에게 이 꿈은 '미완의 마스터플랜'을 의미해요. "
-                "전략적 좌절감이 무의식에 누적된 신호입니다."
-            ),
-            "ENFP 활동가형": (
-                f"🔮 ENFP에게 '{dream_text[:15]}...'는 '새로운 가능성의 문'을 열어주는 꿈! "
-                "직관(Ne)이 폭발하기 직전이에요."
-            ),
-            "ISFJ 수호자형": (
-                f"🔮 ISFJ 시민에게 이 꿈은 '소중한 사람을 잃을까 두려운 마음'의 표현. "
-                f"'{dream_text[:15]}...'은 헌신의 그림자랍니다."
-            ),
-            "ESTP 사업가형": (
-                f"🔮 ESTP에게 '{dream_text[:15]}...'는 '지루한 일상에 대한 반란'. "
-                "현실에서 더 큰 모험이 필요하다는 사인이에요."
-            ),
+        temps = {
+            "ST (감각-사고)": f"현실의 스트레스가 논리적으로 재구성된 결과입니다. '{dream_text[:15]}...'",
+            "SF (감각-감정)": f"인간관계의 피로감이 감정적으로 폭발했네요. '{dream_text[:15]}...'",
+            "NT (직관-사고)": f"미래의 변수들을 뇌가 고차원적으로 시뮬레이션 중입니다. '{dream_text[:15]}...'",
+            "NF (직관-감정)": f"억압된 자아가 해방을 요구하는 예술적 기질의 발현입니다. '{dream_text[:15]}...'"
         }
-        return {
-            "interpreter": self.name,
-            "title": self.title,
-            "option": option,
-            "verdict": templates[option],
-            "risk_level": random.choice(["LOW", "MEDIUM"]),
-            "tag": "💎 PERSONALITY"
-        }
-
+        return {"verdict": temps[option], "risk": "MEDIUM"}
 
 class TherapistInterpreter(Interpreter):
-    """심리치료사 관점에서 꿈을 부드럽게 가공하는 해석가."""
     def __init__(self):
-        super().__init__(
-            name="닥터 소피아 림",
-            title="국가공인 임상 무의식 치료사",
-            options=["인지행동치료(CBT)", "정신역동 치료", "마음챙김 가공", "EMDR 안구재처리"]
-        )
+        super().__init__("닥터 프로이트", "전통 수면 치료사", ["유년기 트라우마", "현실 도피 및 퇴행", "억압된 무의식", "자아 통합 과정"])
 
     def process(self, dream_text: str, option: str) -> dict:
-        self.validate_option(option)
-        templates = {
-            "인지행동치료(CBT)": (
-                f"🌿 '{dream_text[:15]}...' 이 꿈에서 떠오른 두려움은 '인지 왜곡'일 수 있어요. "
-                "현실 검증을 통해 안전한 형태로 재가공했습니다."
-            ),
-            "정신역동 치료": (
-                f"🌿 무의식 속에 자리 잡은 '{dream_text[:15]}...'의 정서는 "
-                "어린 시절의 미해결 감정과 연결되어 있어요. 따뜻하게 통합해드릴게요."
-            ),
-            "마음챙김 가공": (
-                f"🌿 호흡과 함께 '{dream_text[:15]}...'의 이미지를 흘려보내세요. "
-                "지금 이 순간, 당신은 안전합니다."
-            ),
-            "EMDR 안구재처리": (
-                f"🌿 '{dream_text[:15]}...'의 외상 기억을 좌우 자극으로 재처리합니다. "
-                "이제 이 장면은 '단순한 회상'으로 가공되었어요."
-            ),
+        temps = {
+            "유년기 트라우마": f"'{dream_text[:15]}...'는 어릴 적 부모님과의 애착 관계 상실을 의미합니다.",
+            "현실 도피 및 퇴행": f"무거운 책임을 회피하고 싶은 유아기적 퇴행 심리입니다. '{dream_text[:15]}...'",
+            "억압된 무의식": f"사회적 체면에 짓눌린 본능적 욕구가 비틀려 폭발했습니다. '{dream_text[:15]}...'",
+            "자아 통합 과정": f"분열된 정신이 스스로를 치유해 가는 긍정적인 과정입니다. '{dream_text[:15]}...'"
         }
-        return {
-            "interpreter": self.name,
-            "title": self.title,
-            "option": option,
-            "verdict": templates[option],
-            "risk_level": "LOW",
-            "tag": "💊 THERAPEUTIC"
-        }
+        return {"verdict": temps[option], "risk": "LOW"}
 
-
-# ================================================================
-# [SECTION E] 무의식 재판소 (전체 시스템을 관장하는 컨트롤러)
-# ================================================================
-class DreamCensorshipCourt:
-    """플레이어(검열관)가 사용하는 재판소 본부."""
-    def __init__(self):
-        self.interpreters = {
-            "professor": ProfessorInterpreter(),
-            "mbti": MBTIInterpreter(),
-            "therapist": TherapistInterpreter(),
-        }
-        self.history = []
-
-    def get_interpreter(self, key: str) -> Interpreter:
-        key = (key or "").lower().strip()
-        if key not in self.interpreters:
-            raise InvalidInterpreterError(
-                f"'{key}'라는 해석가는 재판소에 등록되어 있지 않습니다. "
-                f"등록된 해석가: {list(self.interpreters.keys())}"
-            )
-        return self.interpreters[key]
-
-    def interpret(self, raw_text: str, interpreter_key: str, option: str) -> dict:
-        dream = Dream(raw_text)  # __len__ + UnprocessableDreamError 트리거 지점
-        interpreter = self.get_interpreter(interpreter_key)
-        # __call__ 매직메소드 활용 → 다형성(process) 호출
-        result = interpreter(dream.raw_text, option)
-        # 결과 메타데이터 추가
-        result.update({
-            "dream_meta": {
-                "citizen_id": dream.citizen_id,
-                "length": len(dream),   # __len__ 사용
-                "timestamp": dream.timestamp,
-                "summary": str(dream),  # __str__ 사용
-            }
-        })
-        self.history.append(result)
-        return result
-
-    def __len__(self):
-        """매직메소드: 재판소에 누적된 처리 건수."""
-        return len(self.history)
-
-    def __str__(self):
-        return f"⚖ 무의식 재판소 | 등록 해석가 {len(self.interpreters)}명 | 누적 처리 {len(self)}건"
-
-
-# 전역 재판소 인스턴스
-COURT = DreamCensorshipCourt()
-
+# 전역 객체 생성
+interpreters = {
+    "professor": ProfessorInterpreter(),
+    "mbti": MBTIInterpreter(),
+    "therapist": TherapistInterpreter()
+}
 
 # ================================================================
-# [SECTION F] Flask API 엔드포인트
+# [SECTION E] Streamlit 화면 렌더링 (프론트엔드 역할)
 # ================================================================
-@app.errorhandler(DreamInjectorError)
-def handle_dream_error(e: DreamInjectorError):
-    return jsonify(e.to_dict()), e.status_code
+def main():
+    st.markdown("<h1 class='main-title'>UNCONSCIOUS COURT</h1>", unsafe_allow_html=True)
+    st.markdown("<h4 class='sub-title'>Dream Injector v2077.11.13</h4>", unsafe_allow_html=True)
 
+    # 1. 꿈 입력
+    st.subheader("[ STEP 1 ] 원시 꿈 입고")
+    dream_input = st.text_area("시민의 무의식 단편을 최소 10자 이상 입력해 주십시오.", height=120)
 
-@app.route("/api/interpreters", methods=["GET"])
-def list_interpreters():
-    """등록된 3명의 해석가 및 각자의 4가지 가공옵션 목록 반환."""
-    data = []
-    for key, itp in COURT.interpreters.items():
-        data.append({
-            "key": key,
-            "name": itp.name,
-            "title": itp.title,
-            "options": itp.options,
-            "display": str(itp),  # __str__
-        })
-    return jsonify({"interpreters": data, "court": str(COURT)})
+    # 2. 해석가 선택
+    st.subheader("[ STEP 2 ] 해석가 배정")
+    interp_keys = list(interpreters.keys())
+    interp_names = [interpreters[k].name for k in interp_keys]
+    
+    selected_name = st.radio("어떤 해석가에게 꿈을 맡기시겠습니까?", interp_names, horizontal=True)
+    selected_key = interp_keys[interp_names.index(selected_name)]
+    selected_interp = interpreters[selected_key]
 
+    # 3. 가공 방식 선택
+    st.subheader(f"[ STEP 3 ] {selected_interp.name}의 가공 방식 선택")
+    selected_opt = st.selectbox("적용할 분석 렌즈를 선택하세요:", selected_interp.options)
 
-@app.route("/api/interpret", methods=["POST"])
-def interpret_dream():
-    """
-    꿈을 해석/가공하는 메인 엔드포인트.
-    body: { "dream": "...", "interpreter": "professor|mbti|therapist", "option": "..." }
-    """
-    body = request.get_json(silent=True) or {}
-    dream_text = body.get("dream", "")
-    interpreter_key = body.get("interpreter", "")
-    option = body.get("option", "")
+    # 4. 실행 버튼
+    st.write("---")
+    if st.button("▶ INJECT DREAM (꿈 검열 및 주입)", use_container_width=True):
+        try:
+            # OOP 로직 실행
+            dream = Dream(dream_input)
+            result = selected_interp.process(dream.raw_text, selected_opt)
+            
+            # 결과 출력
+            st.markdown(f"""
+            <div class='result-box'>
+                <h3 style='color: #3a0ca3; margin-top: 0;'>[ 검열 완료 리포트 ]</h3>
+                <p><b>CITIZEN ID:</b> CITIZEN-{dream.citizen_id}</p>
+                <p><b>LENGTH:</b> {len(dream)} 자</p>
+                <p><b>RISK LEVEL:</b> {result['risk']}</p>
+                <hr>
+                <p style='font-size: 1.1rem; line-height: 1.6; color: #333;'>{result['verdict']}</p>
+                <p style='color: #198754; font-weight: bold; margin-bottom: 0;'>✓ 시민의 뇌에 안전하게 주입되었습니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        except UnprocessableDreamError as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error(f"시스템 오류 발생: {str(e)}")
 
-    if not interpreter_key:
-        raise InvalidInterpreterError("해석가를 선택해 주세요.")
-    if not option:
-        raise InvalidOptionError("가공 방식을 선택해 주세요.")
-
-    result = COURT.interpret(dream_text, interpreter_key, option)
-    return jsonify({"ok": True, "result": result})
-
-
-@app.route("/api/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "court": str(COURT), "processed": len(COURT)})
-
-
-@app.route("/", methods=["GET"])
-def index():
-    """Vercel 환경에서 정적 index.html 서빙."""
-    public_dir = os.path.join(os.path.dirname(__file__), "..", "public")
-    return send_from_directory(public_dir, "index.html")
-
-
-# ================================================================
-# [SECTION G] 로컬 실행 진입점
-# ================================================================
 if __name__ == "__main__":
-    print(COURT)
-    for k, itp in COURT.interpreters.items():
-        print(" -", itp)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    main()
