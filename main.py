@@ -4,9 +4,18 @@
  무의식 재판소 - 드림 인젝터 (Dream Injector)
  Streamlit 배포용 단일 파일 버전
 ----------------------------------------------------------------
+ 핵심 흐름:
+  1) 꿈 입력
+  2) 해석가 선택
+  3) 꿈 해석하기
+  4) 해석 결과 확인
+  5) 해석 결과를 바탕으로 사용자가 직접 주입 텍스트 입력
+  6) 꿈 주입하기
+  7) 주입이 완료되었습니다 출력
+
  [OOP 핵심 요구사항 체크리스트]
   1) 클래스 3개 이상: Interpreter 부모 + 3개 자식 + Dream + DreamInjectionCourt
-  2) 다형성: process(dream_text, injection_text) 오버라이딩
+  2) 다형성: process(dream_text) 오버라이딩
   3) 매직 메소드: __str__, __len__, __repr__, __call__
   4) 사용자 정의 예외: UnprocessableDreamError, InvalidInterpreterError, InvalidInjectionTextError
 
@@ -14,7 +23,7 @@
   streamlit run streamlit_app.py
 
  Streamlit Cloud:
-  - 이 파일을 streamlit_app.py로 업로드
+  - Main file path: streamlit_app.py
   - requirements.txt에 streamlit만 작성
 ================================================================
 """
@@ -24,7 +33,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import hashlib
-import random
 import re
 from typing import Dict, List, Optional
 
@@ -122,19 +130,21 @@ class Interpreter(ABC):
         self.perspective = perspective
 
     @abstractmethod
-    def process(self, dream_text: str, injection_text: str) -> dict:
+    def process(self, dream_text: str) -> dict:
         """
         다형성의 핵심.
-        같은 꿈과 주입 텍스트를 받더라도 해석가마다 다른 방식으로 판별한다.
+        같은 꿈을 받아도 해석가마다 다른 방식으로 긍정/부정 측면을 판별한다.
         """
         raise NotImplementedError
 
-    def _extract_keywords(self, text: str) -> List[str]:
-        """꿈 텍스트와 주입 텍스트에서 핵심 키워드를 간단히 추출."""
+    def extract_keywords(self, text: str) -> List[str]:
+        """꿈 텍스트에서 핵심 키워드를 간단히 추출."""
         words = re.findall(r"[가-힣A-Za-z0-9]{2,}", text)
+
         stopwords = {
-            "그리고", "그래서", "하지만", "나는", "내가", "꿈에서",
-            "있었다", "같았다", "너무", "계속", "무언가", "누군가",
+            "그리고", "그래서", "하지만", "나는", "내가", "꿈에서", "있었다",
+            "같았다", "너무", "계속", "무언가", "누군가", "어떤", "다시",
+            "있는", "없는", "했다", "하게", "처럼", "갑자기",
         }
 
         keywords = []
@@ -144,21 +154,19 @@ class Interpreter(ABC):
 
         return keywords[:6] if keywords else ["불안", "기억", "욕망"]
 
-    def _risk_level(self, dream_text: str, injection_text: str) -> str:
+    def calculate_risk_level(self, dream_text: str) -> str:
         """부정 키워드와 강한 감정 표현을 기준으로 위험도를 산정."""
-        target_text = f"{dream_text} {injection_text}"
-
         high_words = [
-            "죽음", "살해", "피", "추락", "감금", "도망", "공포",
-            "악몽", "절망", "폭발", "위협", "사라짐",
+            "죽음", "죽다", "살해", "피", "추락", "감금", "도망", "공포",
+            "악몽", "절망", "폭발", "위협", "사라짐", "자해", "폭력",
         ]
         medium_words = [
-            "불안", "울음", "상실", "혼란", "어둠", "실패",
-            "고립", "압박", "쫓김", "갈등",
+            "불안", "울음", "상실", "혼란", "어둠", "실패", "고립",
+            "압박", "쫓김", "갈등", "두려움", "외로움",
         ]
 
-        high_score = sum(word in target_text for word in high_words)
-        medium_score = sum(word in target_text for word in medium_words)
+        high_score = sum(word in dream_text for word in high_words)
+        medium_score = sum(word in dream_text for word in medium_words)
 
         if high_score >= 1 or medium_score >= 3:
             return "HIGH"
@@ -166,13 +174,12 @@ class Interpreter(ABC):
             return "MEDIUM"
         return "LOW"
 
-    def _base_result(
+    def make_result(
         self,
         keywords: List[str],
         positive_view: str,
         negative_view: str,
         risk_level: str,
-        injected_sentence: str,
     ) -> dict:
         return {
             "interpreter": self.name,
@@ -181,7 +188,6 @@ class Interpreter(ABC):
             "positive_view": positive_view,
             "negative_view": negative_view,
             "risk_level": risk_level,
-            "injected_sentence": injected_sentence,
         }
 
     def __str__(self) -> str:
@@ -190,9 +196,9 @@ class Interpreter(ABC):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name!r})"
 
-    def __call__(self, dream_text: str, injection_text: str) -> dict:
-        """매직 메소드 ④: interpreter(dream_text, injection_text) 형태로 호출 가능."""
-        return self.process(dream_text, injection_text)
+    def __call__(self, dream_text: str) -> dict:
+        """매직 메소드 ④: interpreter(dream_text) 형태로 호출 가능."""
+        return self.process(dream_text)
 
 
 # ================================================================
@@ -208,25 +214,23 @@ class LeeDongHyunInterpreter(Interpreter):
             perspective="키워드 중심의 긍정/부정 양면 판별",
         )
 
-    def process(self, dream_text: str, injection_text: str) -> dict:
-        keywords = self._extract_keywords(f"{dream_text} {injection_text}")
-        risk_level = self._risk_level(dream_text, injection_text)
+    def process(self, dream_text: str) -> dict:
+        keywords = self.extract_keywords(dream_text)
+        risk_level = self.calculate_risk_level(dream_text)
+        main_keywords = ", ".join(keywords[:3])
 
         positive = (
-            f"핵심 키워드 {', '.join(keywords[:3])}는 단순한 불안의 흔적이 아니라, "
-            "사용자가 현재 상황을 해석하고 다시 통제하려는 시도로 볼 수 있습니다. "
-            "주입 텍스트는 꿈의 흐름에 새로운 의미를 부여해 감정의 방향을 바꾸는 장치로 작동합니다."
+            f"{main_keywords} 키워드는 단순한 불안의 흔적이 아니라, "
+            "현재 상황을 해석하고 다시 통제하려는 무의식적 시도로 볼 수 있습니다. "
+            "이 꿈은 사용자가 자신의 감정과 문제 상황을 다시 구조화하려는 가능성을 보여줍니다."
         )
         negative = (
-            f"반대로 {', '.join(keywords[:3])}는 억눌린 긴장이나 회피하고 싶은 문제를 드러낼 수 있습니다. "
-            "주입 텍스트가 지나치게 강하면 원래 꿈의 감정을 덮어버려 부자연스러운 왜곡이 생길 수 있습니다."
-        )
-        injected = (
-            f"주입 문장: {injection_text.strip()} "
-            "이 문장은 꿈속 장면에 삽입되어 사용자의 무의식적 판단을 재구성합니다."
+            f"반대로 {main_keywords} 키워드는 억눌린 긴장, 회피하고 싶은 문제, "
+            "또는 아직 해결되지 않은 심리적 부담을 드러낼 수 있습니다. "
+            "꿈의 장면이 반복되거나 강하게 남는다면 내면의 압박이 커졌다는 신호일 수 있습니다."
         )
 
-        return self._base_result(keywords, positive, negative, risk_level, injected)
+        return self.make_result(keywords, positive, negative, risk_level)
 
 
 class MBTIInterpreter(Interpreter):
@@ -239,24 +243,21 @@ class MBTIInterpreter(Interpreter):
             perspective="성향 기반의 긍정/부정 양면 판별",
         )
 
-    def process(self, dream_text: str, injection_text: str) -> dict:
-        keywords = self._extract_keywords(f"{dream_text} {injection_text}")
-        risk_level = self._risk_level(dream_text, injection_text)
+    def process(self, dream_text: str) -> dict:
+        keywords = self.extract_keywords(dream_text)
+        risk_level = self.calculate_risk_level(dream_text)
+        main_keywords = ", ".join(keywords[:3])
 
         positive = (
-            f"{', '.join(keywords[:3])} 키워드는 사용자의 성향과 욕구가 선명해지는 지점입니다. "
-            "주입 텍스트는 선택, 가능성, 관계 회복 같은 긍정적 방향으로 꿈의 해석을 유도할 수 있습니다."
+            f"{main_keywords} 키워드는 사용자의 성향과 욕구가 선명해지는 지점입니다. "
+            "꿈은 새로운 선택지, 관계 회복, 자기표현 같은 방향으로 해석될 수 있습니다."
         )
         negative = (
-            "다만 성향 중심 해석은 꿈을 지나치게 유형화할 위험이 있습니다. "
-            f"{', '.join(keywords[:3])}를 고정된 성격의 증거로 단정하면 꿈의 복합적인 감정을 놓칠 수 있습니다."
-        )
-        injected = (
-            f"주입 문장: {injection_text.strip()} "
-            "이 문장은 꿈속 선택지를 확장하는 심리적 신호로 삽입됩니다."
+            "다만 성향 중심 해석은 꿈을 지나치게 단순화할 위험이 있습니다. "
+            f"{main_keywords}를 고정된 성격의 증거로 단정하면 꿈의 복합적인 감정을 놓칠 수 있습니다."
         )
 
-        return self._base_result(keywords, positive, negative, risk_level, injected)
+        return self.make_result(keywords, positive, negative, risk_level)
 
 
 class TherapistInterpreter(Interpreter):
@@ -269,31 +270,28 @@ class TherapistInterpreter(Interpreter):
             perspective="정서 안정 중심의 긍정/부정 양면 판별",
         )
 
-    def process(self, dream_text: str, injection_text: str) -> dict:
-        keywords = self._extract_keywords(f"{dream_text} {injection_text}")
-        risk_level = self._risk_level(dream_text, injection_text)
+    def process(self, dream_text: str) -> dict:
+        keywords = self.extract_keywords(dream_text)
+        risk_level = self.calculate_risk_level(dream_text)
+        main_keywords = ", ".join(keywords[:3])
 
         positive = (
-            f"{', '.join(keywords[:3])}는 마음이 보내는 신호로 볼 수 있습니다. "
-            "주입 텍스트는 불안을 억누르기보다 안전한 의미로 다시 바라보게 만드는 완충 장치가 됩니다."
+            f"{main_keywords} 키워드는 마음이 보내는 신호로 볼 수 있습니다. "
+            "이 꿈은 불안을 억누르기보다 안전하게 바라보고 정리할 기회를 제공합니다."
         )
         negative = (
-            "그러나 주입 텍스트가 감정을 너무 빠르게 안정시키는 방향으로만 작동하면, "
-            "사용자가 실제로 느낀 불안이나 상실감을 충분히 마주하지 못할 수 있습니다."
-        )
-        injected = (
-            f"주입 문장: {injection_text.strip()} "
-            "이 문장은 꿈의 정서를 완화하고 안전한 해석으로 연결하는 문장으로 삽입됩니다."
+            "그러나 꿈이 주는 불편한 감정을 너무 빠르게 안정시키려 하면, "
+            f"{main_keywords}에 담긴 실제 불안이나 상실감을 충분히 마주하지 못할 수 있습니다."
         )
 
-        return self._base_result(keywords, positive, negative, risk_level, injected)
+        return self.make_result(keywords, positive, negative, risk_level)
 
 
 # ================================================================
 # [SECTION E] 무의식 주입소 컨트롤러
 # ================================================================
 class DreamInjectionCourt:
-    """플레이어가 사용하는 꿈 주입 시스템 본부."""
+    """꿈 해석과 주입을 관리하는 시스템 본부."""
 
     def __init__(self):
         self.interpreters: Dict[str, Interpreter] = {
@@ -312,6 +310,24 @@ class DreamInjectionCourt:
             )
         return self.interpreters[normalized_key]
 
+    def interpret(self, raw_text: str, interpreter_key: str) -> dict:
+        dream = Dream(raw_text)
+        interpreter = self.get_interpreter(interpreter_key)
+
+        result = interpreter(dream.raw_text)
+        result.update(
+            {
+                "dream_text": dream.raw_text,
+                "dream_meta": {
+                    "citizen_id": dream.citizen_id,
+                    "timestamp": dream.timestamp,
+                    "summary": str(dream),
+                },
+            }
+        )
+
+        return result
+
     def validate_injection_text(self, injection_text: str) -> str:
         cleaned = (injection_text or "").strip()
         if len(cleaned) < 2:
@@ -320,24 +336,26 @@ class DreamInjectionCourt:
             raise InvalidInjectionTextError("주입 텍스트는 최대 300자까지만 입력할 수 있습니다.")
         return cleaned
 
-    def inject(self, raw_text: str, interpreter_key: str, injection_text: str) -> dict:
-        dream = Dream(raw_text)
+    def inject(self, interpretation_result: dict, injection_text: str) -> dict:
         cleaned_injection = self.validate_injection_text(injection_text)
-        interpreter = self.get_interpreter(interpreter_key)
 
-        result = interpreter(dream.raw_text, cleaned_injection)
-        result.update(
-            {
-                "dream_meta": {
-                    "citizen_id": dream.citizen_id,
-                    "timestamp": dream.timestamp,
-                    "summary": str(dream),
-                }
-            }
-        )
+        injection_result = {
+            "interpreter": interpretation_result["interpreter"],
+            "title": interpretation_result["title"],
+            "keywords": interpretation_result["keywords"],
+            "positive_view": interpretation_result["positive_view"],
+            "negative_view": interpretation_result["negative_view"],
+            "risk_level": interpretation_result["risk_level"],
+            "injection_text": cleaned_injection,
+            "final_message": (
+                f"'{cleaned_injection}' 문장이 해석 결과의 핵심 키워드 "
+                f"({', '.join(interpretation_result['keywords'][:3])})를 바탕으로 꿈에 주입되었습니다."
+            ),
+            "dream_meta": interpretation_result["dream_meta"],
+        }
 
-        self.history.append(result)
-        return result
+        self.history.append(injection_result)
+        return injection_result
 
     def reset_history(self) -> None:
         self.history.clear()
@@ -360,10 +378,43 @@ def get_court() -> DreamInjectionCourt:
     return st.session_state.court
 
 
+def init_session_state() -> None:
+    if "interpretation_result" not in st.session_state:
+        st.session_state.interpretation_result = None
+    if "last_dream_text" not in st.session_state:
+        st.session_state.last_dream_text = ""
+    if "last_interpreter_key" not in st.session_state:
+        st.session_state.last_interpreter_key = ""
+
+
+def reset_interpretation_if_input_changed(dream_text: str, interpreter_key: str) -> None:
+    """꿈 내용이나 해석가가 바뀌면 이전 해석 결과를 초기화."""
+    if (
+        st.session_state.last_dream_text
+        and (
+            dream_text != st.session_state.last_dream_text
+            or interpreter_key != st.session_state.last_interpreter_key
+        )
+    ):
+        st.session_state.interpretation_result = None
+
+
 def render_sidebar(court: DreamInjectionCourt) -> None:
     st.sidebar.title("무의식 주입소")
     st.sidebar.caption(str(court))
     st.sidebar.divider()
+
+    st.sidebar.subheader("진행 흐름")
+    st.sidebar.markdown(
+        """
+        1. 꿈 입력  
+        2. 해석가 선택  
+        3. 꿈 해석하기  
+        4. 해석 결과 확인  
+        5. 직접 주입 텍스트 입력  
+        6. 꿈 주입하기
+        """
+    )
 
     st.sidebar.subheader("OOP 체크리스트")
     st.sidebar.markdown(
@@ -371,15 +422,66 @@ def render_sidebar(court: DreamInjectionCourt) -> None:
         - 추상 부모 클래스: `Interpreter`
         - 자식 클래스 3개
         - 다형성: `process()` 오버라이딩
-        - 매직 메소드: `__str__`, `__len__`, `__repr__`, `__call__`
+        - 매직 메소드 4개
         - 사용자 정의 예외 3개
         """
     )
 
     if st.sidebar.button("주입 기록 초기화"):
         court.reset_history()
+        st.session_state.interpretation_result = None
         st.sidebar.success("기록이 초기화되었습니다.")
         st.rerun()
+
+
+def render_interpretation_result(result: dict) -> None:
+    st.success("해석이 완료되었습니다.")
+    st.subheader("해석 결과")
+
+    st.markdown(f"### {result['interpreter']}")
+    st.caption(result["title"])
+
+    st.markdown("#### 판별 키워드")
+    st.write(", ".join(result["keywords"]))
+
+    st.markdown("#### 긍정 측면")
+    st.write(result["positive_view"])
+
+    st.markdown("#### 부정 측면")
+    st.write(result["negative_view"])
+
+    st.metric("위험도", result["risk_level"])
+
+
+def render_injection_area(court: DreamInjectionCourt) -> None:
+    st.divider()
+    st.subheader("직접 주입할 텍스트 입력")
+    st.caption("위 해석 결과를 보고, 꿈에 주입하고 싶은 문장을 직접 작성하세요.")
+
+    injection_text = st.text_area(
+        "주입 텍스트",
+        placeholder="예: 이 꿈은 실패의 예고가 아니라, 내가 다시 선택할 수 있다는 신호다.",
+        height=110,
+        max_chars=300,
+        key="injection_text_area",
+    )
+
+    if st.button("꿈 주입하기", type="primary", use_container_width=True):
+        try:
+            injection_result = court.inject(
+                st.session_state.interpretation_result,
+                injection_text,
+            )
+
+            st.success("주입이 완료되었습니다.")
+            st.subheader("주입 결과")
+            st.write(injection_result["final_message"])
+
+        except DreamInjectorError as error:
+            st.error(error.message)
+        except Exception as error:
+            st.error("예상하지 못한 오류가 발생했습니다.")
+            st.exception(error)
 
 
 def render_history(court: DreamInjectionCourt) -> None:
@@ -390,7 +492,7 @@ def render_history(court: DreamInjectionCourt) -> None:
 
         for idx, item in enumerate(reversed(court.history), start=1):
             st.markdown(f"**#{idx} | {item['interpreter']}**")
-            st.write(item["injected_sentence"])
+            st.write(item["final_message"])
             st.caption(f"위험도: {item['risk_level']} | 시민 ID: {item['dream_meta']['citizen_id']}")
             st.divider()
 
@@ -402,11 +504,14 @@ def main() -> None:
         layout="centered",
     )
 
+    init_session_state()
     court = get_court()
     render_sidebar(court)
 
     st.title("🧠 무의식 주입소")
-    st.caption("꿈을 입력하고, 해석가를 선택한 뒤, 직접 주입할 텍스트를 넣어 무의식을 재구성합니다.")
+    st.caption("먼저 꿈을 해석한 뒤, 그 해석 결과를 바탕으로 직접 텍스트를 주입합니다.")
+
+    st.subheader("1단계. 꿈 입력 및 해석가 선택")
 
     dream_text = st.text_area(
         "원시 꿈 데이터 입력",
@@ -427,44 +532,27 @@ def main() -> None:
         format_func=lambda key: interpreter_labels[key],
     )
 
-    injection_text = st.text_area(
-        "직접 주입할 텍스트 입력",
-        placeholder="예: 이 장면은 실패가 아니라 새로운 선택을 시작하는 신호다.",
-        height=100,
-        max_chars=300,
-    )
+    reset_interpretation_if_input_changed(dream_text, interpreter_key)
 
-    submitted = st.button("꿈 주입하기", type="primary", use_container_width=True)
-
-    if submitted:
+    if st.button("꿈 해석하기", use_container_width=True):
         try:
-            result = court.inject(dream_text, interpreter_key, injection_text)
+            result = court.interpret(dream_text, interpreter_key)
 
-            st.success("주입이 완료되었습니다.")
-            st.subheader("주입 결과")
-
-            st.markdown(f"### {result['interpreter']}")
-            st.caption(result["title"])
-
-            st.markdown("#### 판별 키워드")
-            st.write(", ".join(result["keywords"]))
-
-            st.markdown("#### 긍정 측면")
-            st.write(result["positive_view"])
-
-            st.markdown("#### 부정 측면")
-            st.write(result["negative_view"])
-
-            st.metric("위험도", result["risk_level"])
-
-            st.markdown("#### 주입된 텍스트")
-            st.write(result["injected_sentence"])
+            st.session_state.interpretation_result = result
+            st.session_state.last_dream_text = dream_text
+            st.session_state.last_interpreter_key = interpreter_key
 
         except DreamInjectorError as error:
             st.error(error.message)
         except Exception as error:
             st.error("예상하지 못한 오류가 발생했습니다.")
             st.exception(error)
+
+    if st.session_state.interpretation_result is not None:
+        render_interpretation_result(st.session_state.interpretation_result)
+        render_injection_area(court)
+    else:
+        st.info("먼저 '꿈 해석하기' 버튼을 눌러 해석 결과를 생성하세요.")
 
     render_history(court)
 
